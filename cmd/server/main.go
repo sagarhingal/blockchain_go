@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"blockchain_go/internal/blockchain"
 )
@@ -30,6 +31,17 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// withLogging measures the time taken to execute the handler and logs the
+// request method, path and duration.
+func withLogging(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		h(w, r)
+		duration := time.Since(start)
+		log.Printf("%s %s took %s", r.Method, r.URL.Path, duration)
+	}
+}
+
 // NewServer returns a Server with a freshly created blockchain using the
 // provided mining difficulty.
 func NewServer(difficulty int) *Server {
@@ -48,8 +60,10 @@ func (s *Server) addTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body.Close()
+	log.Printf("New transaction from %s to %s amount %.2f", tx.From, tx.To, tx.Amount)
 	s.mu.Lock()
 	s.chain.AddBlock(tx.From, tx.To, tx.Amount)
+	log.Printf("Block added. Chain length %d", len(s.chain.Chain))
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -60,6 +74,7 @@ func (s *Server) addTransaction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getChain(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	log.Printf("Chain requested. Length %d", len(s.chain.Chain))
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(s.chain); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -71,6 +86,7 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	valid := s.chain.IsValid()
 	s.mu.Unlock()
+	log.Printf("Chain validation result: %v", valid)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]bool{"valid": valid}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -80,9 +96,9 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 func main() {
 	srv := NewServer(2)
 
-	http.HandleFunc("/transaction", withCORS(srv.addTransaction))
-	http.HandleFunc("/chain", withCORS(srv.getChain))
-	http.HandleFunc("/validate", withCORS(srv.validate))
+	http.HandleFunc("/transaction", withCORS(withLogging(srv.addTransaction)))
+	http.HandleFunc("/chain", withCORS(withLogging(srv.getChain)))
+	http.HandleFunc("/validate", withCORS(withLogging(srv.validate)))
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
