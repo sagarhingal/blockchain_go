@@ -16,6 +16,20 @@ type Server struct {
 	mu    sync.Mutex
 }
 
+// withCORS wraps an http.HandlerFunc adding permissive CORS headers so the
+// web UI running on a different port can interact with the API.
+func withCORS(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			return
+		}
+		h(w, r)
+	}
+}
+
 // NewServer returns a Server with a freshly created blockchain using the
 // provided mining difficulty.
 func NewServer(difficulty int) *Server {
@@ -66,9 +80,9 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 func main() {
 	srv := NewServer(2)
 
-	http.HandleFunc("/transaction", srv.addTransaction)
-	http.HandleFunc("/chain", srv.getChain)
-	http.HandleFunc("/validate", srv.validate)
+	http.HandleFunc("/transaction", withCORS(srv.addTransaction))
+	http.HandleFunc("/chain", withCORS(srv.getChain))
+	http.HandleFunc("/validate", withCORS(srv.validate))
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
