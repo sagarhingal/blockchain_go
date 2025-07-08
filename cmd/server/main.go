@@ -9,6 +9,38 @@ import (
 	"blockchain_go/internal/blockchain"
 )
 
+// swaggerSpec is a minimal OpenAPI definition describing the HTTP endpoints
+// provided by the server. It is served at /swagger.json.
+const swaggerSpec = `{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Blockchain API",
+    "version": "1.0"
+  },
+  "paths": {
+    "/transaction": {
+      "post": {
+        "summary": "Add transaction",
+        "responses": {
+          "201": {"description": "created"}
+        }
+      }
+    },
+    "/chain": {
+      "get": {
+        "summary": "Get blockchain",
+        "responses": {"200": {"description": "chain"}}
+      }
+    },
+    "/validate": {
+      "get": {
+        "summary": "Validate chain",
+        "responses": {"200": {"description": "status"}}
+      }
+    }
+  }
+}`
+
 // Server exposes HTTP handlers to interact with the blockchain.
 
 type Server struct {
@@ -63,12 +95,19 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// serveSwagger writes the OpenAPI specification used to document the API.
+func (s *Server) serveSwagger(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(swaggerSpec))
+}
+
 func main() {
 	srv := NewServer(2)
 
 	http.HandleFunc("/transaction", srv.addTransaction)
 	http.HandleFunc("/chain", srv.getChain)
 	http.HandleFunc("/validate", srv.validate)
+	http.HandleFunc("/swagger.json", srv.serveSwagger)
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))

@@ -14,6 +14,7 @@ func TestServerEndpoints(t *testing.T) {
 	mux.HandleFunc("/transaction", srv.addTransaction)
 	mux.HandleFunc("/chain", srv.getChain)
 	mux.HandleFunc("/validate", srv.validate)
+	mux.HandleFunc("/swagger.json", srv.serveSwagger)
 
 	// Add a transaction
 	tx := map[string]interface{}{"from": "A", "to": "B", "amount": 1.0}
@@ -39,5 +40,16 @@ func TestServerEndpoints(t *testing.T) {
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	// Fetch swagger spec
+	req = httptest.NewRequest(http.MethodGet, "/swagger.json", nil)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("openapi")) {
+		t.Fatal("swagger spec missing 'openapi' key")
 	}
 }

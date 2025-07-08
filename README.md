@@ -19,11 +19,12 @@ go run ./cmd/server
 go run ./cmd/cli
 ```
 
-The server exposes three endpoints:
+The server exposes four endpoints:
 
 - `POST /transaction` – add a new transaction block using JSON payload `{"from":"Alice","to":"Bob","amount":5}`.
 - `GET /chain` – retrieve the full chain.
 - `GET /validate` – verify the chain integrity.
+- `GET /swagger.json` – retrieve an OpenAPI specification for the API.
 
 Example usage with `curl`:
 
@@ -32,6 +33,7 @@ curl -X POST -d '{"from":"Alice","to":"Bob","amount":5}' \
   -H 'Content-Type: application/json' http://localhost:8080/transaction
 curl http://localhost:8080/chain
 curl http://localhost:8080/validate
+curl http://localhost:8080/swagger.json
 ```
 
 ## Package layout
