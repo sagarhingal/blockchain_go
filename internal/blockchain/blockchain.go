@@ -22,12 +22,11 @@ type Block struct {
 	Nonce     int
 }
 
-// Blockchain stores an ordered list of blocks beginning with a
-// genesis block. Difficulty controls the Proof-of-Work mining target.
+// Blockchain stores an ordered list of blocks beginning with a genesis block.
+// Difficulty controls the Proof-of-Work mining target.
 type Blockchain struct {
-	GenesisBlock Block
-	Chain        []Block
-	Difficulty   int
+	Chain      []Block
+	Difficulty int
 }
 
 // calculateHash generates the SHA-256 hash of the block fields.
@@ -51,18 +50,16 @@ func (b *Block) mine(difficulty int) {
 // returns it. The provided difficulty determines how many leading zeros are
 // required in a block hash during mining.
 func CreateBlockchain(difficulty int) Blockchain {
-
 	// Create the genesis block with default values.
 	genesisBlock := Block{
 		Hash:      "0",
 		Timestamp: time.Now(),
 	}
 
-	// Return the chain with the genesis (first) block.
+	// Initialize the chain containing the genesis block only.
 	return Blockchain{
-		genesisBlock,
-		[]Block{genesisBlock},
-		difficulty,
+		Chain:      []Block{genesisBlock},
+		Difficulty: difficulty,
 	}
 }
 
