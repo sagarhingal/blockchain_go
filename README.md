@@ -4,6 +4,9 @@ This project provides a minimal blockchain implementation written in Go.
 It now exposes an HTTP server for interacting with the blockchain and
 demonstrates how simple smart contracts could be integrated.
 
+A lightweight React web UI is available under the `webui` directory for
+basic interaction with the blockchain server.
+
 ## Running the server
 
 ```
@@ -34,12 +37,25 @@ curl http://localhost:8080/chain
 curl http://localhost:8080/validate
 ```
 
+## Web UI
+
+To run the optional React front‑end:
+
+```bash
+cd webui
+npm install
+npm run dev
+```
+
+The UI expects the Go server to be running on `http://localhost:8080`.
+
 ## Package layout
 
 - `internal/blockchain` – blockchain types and logic.
 - `internal/contracts` – basic smart contract interface.
 - `cmd/server` – HTTP server exposing blockchain APIs.
 - `cmd/cli` – demonstration CLI application.
+- `webui` – React-based web interface.
 
 ## Testing
 
@@ -48,4 +64,3 @@ Run unit tests with:
 ```
 go test ./...
 ```
-
