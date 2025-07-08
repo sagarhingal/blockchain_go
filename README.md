@@ -13,6 +13,12 @@ go mod tidy
 go run ./cmd/server
 ```
 
+## Running the CLI
+
+```
+go run ./cmd/cli
+```
+
 The server exposes three endpoints:
 
 - `POST /transaction` – add a new transaction block using JSON payload `{"from":"Alice","to":"Bob","amount":5}`.
@@ -33,6 +39,7 @@ curl http://localhost:8080/validate
 - `internal/blockchain` – blockchain types and logic.
 - `internal/contracts` – basic smart contract interface.
 - `cmd/server` – HTTP server exposing blockchain APIs.
+- `cmd/cli` – demonstration CLI application.
 
 ## Testing
 
