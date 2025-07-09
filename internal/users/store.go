@@ -93,3 +93,21 @@ func (s *Store) UpdatePassword(username, password string) error {
 	_, err = s.db.Exec(`UPDATE users SET password=? WHERE username=?`, string(hash), username)
 	return err
 }
+
+// All returns all users without passwords.
+func (s *Store) All() ([]User, error) {
+	rows, err := s.db.Query(`SELECT username, first_name, last_name, mobile, pin_code, state, city, country FROM users`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.Username, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}

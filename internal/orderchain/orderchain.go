@@ -13,14 +13,15 @@ import (
 
 // Order represents a supply chain order with scoped participants and encrypted logs.
 type Order struct {
-	ID     string
-	Owner  string
-	Actors map[string]string // username->role
-	Status string
-	Events []event
-	AddOns []string
-	key    []byte
-	mu     sync.Mutex
+	ID       string
+	Owner    string
+	Actors   map[string]string // username->role
+	Status   string
+	Events   []event
+	AddOns   []string
+	Watchers map[string]bool
+	key      []byte
+	mu       sync.Mutex
 }
 
 type event struct {
@@ -57,11 +58,12 @@ func (c *Chain) CreateOrder(owner string) *Order {
 	key := make([]byte, 32)
 	rand.Read(key)
 	ord := &Order{
-		ID:     id,
-		Owner:  owner,
-		Actors: map[string]string{owner: "client"},
-		Status: "created",
-		key:    key,
+		ID:       id,
+		Owner:    owner,
+		Actors:   map[string]string{owner: "client"},
+		Status:   "created",
+		key:      key,
+		Watchers: make(map[string]bool),
 	}
 	c.mu.Lock()
 	c.orders[id] = ord
@@ -114,10 +116,36 @@ func (o *Order) AddAddon(actor, details string) error {
 	return nil
 }
 
-// GetEvents returns decrypted events.
-func (o *Order) GetEvents() ([]map[string]string, error) {
+// AddWatcher registers a watcher who will receive event visibility.
+func (o *Order) AddWatcher(owner, watcher string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if owner != o.Owner {
+		return errors.New("not order owner")
+	}
+	o.Watchers[watcher] = true
+	o.addEvent(owner, "added watcher "+watcher)
+	return nil
+}
+
+// IsParticipant checks if user can interact with the order.
+func (o *Order) IsParticipant(user string) bool {
+	if user == o.Owner {
+		return true
+	}
+	if _, ok := o.Actors[user]; ok {
+		return true
+	}
+	return false
+}
+
+// GetEvents returns decrypted events.
+func (o *Order) GetEvents(requester string) ([]map[string]string, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.IsParticipant(requester) && !o.Watchers[requester] {
+		return nil, errors.New("unauthorized")
+	}
 	events := make([]map[string]string, len(o.Events))
 	for i, e := range o.Events {
 		msg, err := decrypt(o.key, e.Message)

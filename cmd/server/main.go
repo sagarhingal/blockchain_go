@@ -161,6 +161,36 @@ func (s *Server) manageRoles(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
+func (s *Server) inviteWatcher(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/order/")
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) < 2 || parts[1] != "invite" {
+		http.NotFound(w, r)
+		return
+	}
+	ord, ok2 := s.chain.Get(parts[0])
+	if !ok2 {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct{ Actor string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := ord.AddWatcher(user, body.Actor); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.logger.Printf("order %s watcher %s added by %s", ord.ID, body.Actor, user)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.userFromRequest(r)
 	if !ok {
@@ -221,8 +251,22 @@ func (s *Server) addAddon(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-func (s *Server) getEvents(w http.ResponseWriter, r *http.Request) {
+func (s *Server) listActors(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.userFromRequest(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	rows, err := s.users.All()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(rows)
+}
+
+func (s *Server) getEvents(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -237,7 +281,7 @@ func (s *Server) getEvents(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	ev, err := ord.GetEvents()
+	ev, err := ord.GetEvents(user)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -278,10 +322,15 @@ func main() {
 			srv.getEvents(w, r)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/invite") {
+			srv.inviteWatcher(w, r)
+			return
+		}
 		http.NotFound(w, r)
 	}))
 	http.HandleFunc("/chain", withCORS(srv.getChain))
 	http.HandleFunc("/transaction", withCORS(srv.createOrder))
+	http.HandleFunc("/marketplace", withCORS(srv.listActors))
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
