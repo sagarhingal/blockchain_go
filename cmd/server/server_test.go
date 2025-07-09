@@ -3,82 +3,51 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"blockchain_go/internal/users"
 )
 
-func TestServerEndpoints(t *testing.T) {
-	srv := NewServer(1)
+func TestOrderFlow(t *testing.T) {
+	srv := NewServer(":memory:")
 	mux := http.NewServeMux()
+	mux.HandleFunc("/signup", srv.signup)
 	mux.HandleFunc("/login", srv.login)
-	mux.HandleFunc("/transaction", srv.addTransaction)
+	mux.HandleFunc("/order", srv.createOrder)
 	mux.HandleFunc("/chain", srv.getChain)
-	mux.HandleFunc("/validate", srv.validate)
 
-	// login as root
-	creds := map[string]string{"username": "root", "password": "12345"}
-	body, _ := json.Marshal(creds)
-	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	// signup new user
+	user := users.User{Username: "alice" + fmt.Sprint(time.Now().UnixNano()), Password: "pass", FirstName: "Alice"}
+	body, _ := json.Marshal(user)
+	req := httptest.NewRequest(http.MethodPost, "/signup", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("login failed: %d", w.Code)
+		t.Fatalf("signup failed: %d %s", w.Code, w.Body.String())
 	}
-	cookie := w.Result().Cookies()[0]
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	token := resp["token"]
 
-	// Add a transaction
-	tx := map[string]interface{}{"from": "A", "to": "B", "amount": 1.0}
-	body, _ = json.Marshal(tx)
-	req = httptest.NewRequest(http.MethodPost, "/transaction", bytes.NewReader(body))
-	req.AddCookie(cookie)
+	// create order
+	req = httptest.NewRequest(http.MethodPost, "/order", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Fatalf("order create failed: %d %s", w.Code, w.Body.String())
 	}
 
-	// Fetch the chain
+	// fetch chain
 	req = httptest.NewRequest(http.MethodGet, "/chain", nil)
-	req.AddCookie(cookie)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-
-	// Validate chain
-	req = httptest.NewRequest(http.MethodGet, "/validate", nil)
-	req.AddCookie(cookie)
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-}
-
-func TestResetPasswordWithoutLogin(t *testing.T) {
-	srv := NewServer(1)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/login", srv.login)
-	mux.HandleFunc("/reset", srv.resetPassword)
-
-	// reset root password without a session
-	body, _ := json.Marshal(map[string]string{"username": "root", "password": "newpass"})
-	req := httptest.NewRequest(http.MethodPost, "/reset", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
-
-	// login using new password
-	creds := map[string]string{"username": "root", "password": "newpass"}
-	body, _ = json.Marshal(creds)
-	req = httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("login failed with new password: %d", w.Code)
+		t.Fatalf("chain fetch failed: %d", w.Code)
 	}
 }
