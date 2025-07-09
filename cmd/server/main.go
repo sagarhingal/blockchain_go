@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -9,9 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"blockchain_go/docs"
 	"blockchain_go/internal/orderchain"
 	"blockchain_go/internal/users"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/rs/zerolog"
 )
 
 const jwtSecret = "secret"
@@ -21,7 +24,7 @@ type Server struct {
 	chain  *orderchain.Chain
 	mu     sync.Mutex
 	users  *users.Store
-	logger *log.Logger
+	logger zerolog.Logger
 }
 
 func NewServer(dbPath ...string) *Server {
@@ -37,9 +40,9 @@ func NewServer(dbPath ...string) *Server {
 	_ = store.CreateUser(users.User{Username: "root", Password: "12345", FirstName: "Root"})
 
 	lf, _ := os.OpenFile("events.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	logger := log.New(lf, "", log.LstdFlags)
+	l := zerolog.New(lf).With().Timestamp().Logger()
 
-	return &Server{chain: orderchain.NewChain(), users: store, logger: logger}
+	return &Server{chain: orderchain.NewChain(), users: store, logger: l}
 }
 
 func withCORS(h http.HandlerFunc) http.HandlerFunc {
@@ -127,7 +130,7 @@ func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ord := s.chain.CreateOrder(user)
-	s.logger.Printf("order %s created by %s", ord.ID, user)
+	s.logger.Info().Msgf("order %s created by %s", ord.ID, user)
 	json.NewEncoder(w).Encode(ord)
 }
 
@@ -157,7 +160,7 @@ func (s *Server) manageRoles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.logger.Printf("order %s role %s added for %s", ord.ID, body.Role, body.Actor)
+	s.logger.Info().Msgf("order %s role %s added for %s", ord.ID, body.Role, body.Actor)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
@@ -187,7 +190,7 @@ func (s *Server) inviteWatcher(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.logger.Printf("order %s watcher %s added by %s", ord.ID, body.Actor, user)
+	s.logger.Info().Msgf("order %s watcher %s added by %s", ord.ID, body.Actor, user)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
@@ -217,7 +220,7 @@ func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.logger.Printf("order %s status %s by %s", ord.ID, body.Status, user)
+	s.logger.Info().Msgf("order %s status %s by %s", ord.ID, body.Status, user)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
@@ -247,7 +250,7 @@ func (s *Server) addAddon(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.logger.Printf("order %s addon by %s", ord.ID, user)
+	s.logger.Info().Msgf("order %s addon by %s", ord.ID, user)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
@@ -302,6 +305,10 @@ func (s *Server) getChain(w http.ResponseWriter, r *http.Request) {
 func main() {
 	srv := NewServer()
 
+	// serve swagger UI and spec
+	swaggerSub, _ := fs.Sub(docs.FS, "swagger")
+	http.Handle("/swagger/", http.StripPrefix("/swagger/", http.FileServer(http.FS(swaggerSub))))
+
 	http.HandleFunc("/signup", withCORS(srv.signup))
 	http.HandleFunc("/login", withCORS(srv.login))
 	http.HandleFunc("/order", withCORS(srv.createOrder))
@@ -332,6 +339,6 @@ func main() {
 	http.HandleFunc("/transaction", withCORS(srv.createOrder))
 	http.HandleFunc("/marketplace", withCORS(srv.listActors))
 
-	log.Println("Server listening on :8080")
+	srv.logger.Info().Msg("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
