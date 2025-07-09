@@ -26,7 +26,11 @@ export default function BlockTable({ chain, showControls = true }) {
     const arr = [...filtered];
     const dir = order === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
-      if (orderBy === 'timestamp') return dir * (a.Timestamp - b.Timestamp);
+      if (orderBy === 'timestamp') {
+        const at = new Date(a.Timestamp).getTime();
+        const bt = new Date(b.Timestamp).getTime();
+        return dir * (at - bt);
+      }
       return dir * (a.index - b.index);
     });
     return arr;
