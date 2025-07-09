@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Button, TextField, Typography } from '@mui/material';
+import { Button, TextField, Typography, Alert } from '@mui/material';
 import { addTransaction } from "../api";
 
 export default function AddTransaction() {
   const [form, setForm] = useState({ from: "", to: "", amount: "" });
   const [error, setError] = useState("");
+  const [msg, setMsg] = useState("");
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -18,6 +19,8 @@ export default function AddTransaction() {
       });
       setForm({ from: "", to: "", amount: "" });
       setError("");
+      setMsg("Transaction submitted");
+      setTimeout(() => setMsg(""), 3000);
     } catch (err) {
       setError(err.message);
     }
@@ -27,6 +30,7 @@ export default function AddTransaction() {
     <div style={{ padding: "1rem" }}>
       <Typography variant="h5" gutterBottom>Add Transaction</Typography>
       {error && <Typography color="error">{error}</Typography>}
+      {msg && <Alert severity="success" sx={{ mb:1 }}>{msg}</Alert>}
       <form onSubmit={handleSubmit} style={{ marginBottom: "1rem" }}>
         <TextField
           name="from"
