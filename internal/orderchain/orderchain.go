@@ -15,7 +15,7 @@ import (
 type Order struct {
 	ID       string
 	Owner    string
-	Actors   map[string]string // username->role
+       Actors   map[string]string // email->role
 	Status   string
 	Created  time.Time
 	Events   []event
@@ -53,7 +53,7 @@ func NewChain() *Chain {
 	return &Chain{orders: make(map[string]*Order)}
 }
 
-// CreateOrder creates a new order owned by username.
+// CreateOrder creates a new order owned by the provided email address.
 func (c *Chain) CreateOrder(owner string) *Order {
 	id := randomID()
 	key := make([]byte, 32)

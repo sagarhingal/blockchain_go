@@ -32,12 +32,15 @@ func NewServer(dbPath ...string) *Server {
 	if len(dbPath) > 0 {
 		path = dbPath[0]
 	}
-	store, err := users.NewStore(path)
-	if err != nil {
-		log.Fatalf("failed to init user store: %v", err)
-	}
-	// ensure root exists
-	_ = store.CreateUser(users.User{Email: "root@example.com", Password: "12345", FirstName: "Root"})
+       store, err := users.NewStore(path)
+       if err != nil {
+               log.Fatalf("failed to init user store: %v", err)
+       }
+       // start with a clean user database
+       if err := store.DeleteAll(); err != nil {
+               log.Printf("failed to clear user store: %v", err)
+       }
+
 
 	lf, _ := os.OpenFile("events.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	l := zerolog.New(lf).With().Timestamp().Logger()
