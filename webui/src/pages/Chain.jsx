@@ -15,7 +15,7 @@ export default function Chain() {
     <div style={{ padding: '1rem' }}>
       <Typography variant="h5" gutterBottom>Blockchain</Typography>
       {error && <Typography color="error">{error}</Typography>}
-      <BlockTable chain={chain} showControls={false} />
+      <BlockTable chain={chain} />
     </div>
   );
 }
