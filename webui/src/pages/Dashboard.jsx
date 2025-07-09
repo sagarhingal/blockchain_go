@@ -1,15 +1,25 @@
 import { useEffect, useState } from "react";
-import { Button, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
+import { Typography, IconButton, Alert } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import CheckIcon from '@mui/icons-material/CheckCircle';
 import { getChain, validateChain } from "../api";
+import BlockTable from "../components/BlockTable";
 
 export default function Dashboard() {
   const [chain, setChain] = useState([]);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     getChain()
       .then((data) => setChain(data.Chain || []))
       .catch((err) => setError(err.message));
+    const interval = setInterval(() => {
+      getChain(true)
+        .then((data) => setChain(data.Chain || []))
+        .catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const refresh = async () => {
@@ -24,41 +34,29 @@ export default function Dashboard() {
   const validate = async () => {
     try {
       const res = await validateChain();
-      alert(`Chain valid: ${res.valid}`);
+      setMessage(`Chain valid: ${res.valid}`);
     } catch (err) {
       setError(err.message);
     }
   };
 
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => setMessage(""), 3000);
+    return () => clearTimeout(t);
+  }, [message]);
+
   return (
     <div style={{ padding: "1rem" }}>
       <Typography variant="h4" gutterBottom>Dashboard</Typography>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <p>
-        Blocks in chain: {chain.length}{" "}
-        <Button variant="outlined" onClick={refresh}>Refresh</Button>{" "}
-        <Button variant="outlined" onClick={validate}>Validate</Button>
-      </p>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>#</TableCell>
-            <TableCell>From</TableCell>
-            <TableCell>To</TableCell>
-            <TableCell>Amount</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {chain.map((b, idx) => (
-            <TableRow key={idx}>
-              <TableCell>{idx}</TableCell>
-              <TableCell>{b.Data?.from || "-"}</TableCell>
-              <TableCell>{b.Data?.to || "-"}</TableCell>
-              <TableCell>{b.Data?.amount || "-"}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      {error && <Typography color="error">{error}</Typography>}
+      {message && <Alert severity="info" sx={{ mb:1 }}>{message}</Alert>}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <Typography sx={{ mr: 1 }}>Blocks in chain: {chain.length}</Typography>
+        <IconButton onClick={refresh} aria-label="refresh" size="small"><RefreshIcon /></IconButton>
+        <IconButton onClick={validate} aria-label="validate" size="small"><CheckIcon /></IconButton>
+      </div>
+      <BlockTable chain={chain} />
     </div>
   );
 }

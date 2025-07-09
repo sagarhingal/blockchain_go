@@ -19,8 +19,13 @@ type Server struct {
 	chain    blockchain.Blockchain
 	mu       sync.Mutex
 	users    *users.Store
-	sessions map[string]string
+	sessions map[string]session
 	sessMu   sync.Mutex
+}
+
+type session struct {
+	user    string
+	expires time.Time
 }
 
 // withCORS wraps an http.HandlerFunc adding permissive CORS headers so the
@@ -67,7 +72,7 @@ func NewServer(difficulty int) *Server {
 	return &Server{
 		chain:    blockchain.CreateBlockchain(difficulty),
 		users:    store,
-		sessions: make(map[string]string),
+		sessions: make(map[string]session),
 	}
 }
 
@@ -77,9 +82,18 @@ func (s *Server) usernameFromRequest(r *http.Request) (string, bool) {
 		return "", false
 	}
 	s.sessMu.Lock()
-	defer s.sessMu.Unlock()
-	u, ok := s.sessions[cookie.Value]
-	return u, ok
+	sess, ok := s.sessions[cookie.Value]
+	if ok {
+		if time.Now().After(sess.expires) {
+			delete(s.sessions, cookie.Value)
+			ok = false
+		}
+	}
+	s.sessMu.Unlock()
+	if !ok {
+		return "", false
+	}
+	return sess.user, true
 }
 
 func (s *Server) newSession(username string) string {
@@ -87,7 +101,7 @@ func (s *Server) newSession(username string) string {
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 	s.sessMu.Lock()
-	s.sessions[token] = username
+	s.sessions[token] = session{user: username, expires: time.Now().Add(30 * time.Minute)}
 	s.sessMu.Unlock()
 	return token
 }
@@ -106,7 +120,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := s.newSession(creds.Username)
-	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/"})
+	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", Expires: time.Now().Add(30 * time.Minute)})
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
@@ -124,7 +138,7 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := s.newSession(creds.Username)
-	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/"})
+	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", Expires: time.Now().Add(30 * time.Minute)})
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 

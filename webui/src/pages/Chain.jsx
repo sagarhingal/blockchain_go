@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Typography } from '@mui/material';
 import { getChain } from '../api';
+import BlockTable from '../components/BlockTable';
 
 export default function Chain() {
   const [chain, setChain] = useState([]);
@@ -14,7 +15,7 @@ export default function Chain() {
     <div style={{ padding: '1rem' }}>
       <Typography variant="h5" gutterBottom>Blockchain</Typography>
       {error && <Typography color="error">{error}</Typography>}
-      <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(chain, null, 2)}</pre>
+      <BlockTable chain={chain} showControls={false} />
     </div>
   );
 }
