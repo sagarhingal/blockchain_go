@@ -14,7 +14,8 @@ export default function BlockTable({ chain, showControls = true }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return chain
-      .map((b, idx) => ({ ...b, index: idx }))
+      .slice(1)
+      .map((b, idx) => ({ ...b, index: idx + 1 }))
       .filter(b => {
         const data = b.Data || {};
         const text = `${data.from || ''} ${data.to || ''} ${data.amount || ''} ${b.Hash}`.toLowerCase();
@@ -92,16 +93,15 @@ export default function BlockTable({ chain, showControls = true }) {
         <TableBody>
           {visible.map((b) => {
             const idx = b.index;
-            const isGenesis = idx === 0;
             const data = b.Data || {};
             return (
-              <TableRow key={idx} sx={isGenesis ? { bgcolor: '#f5f5f5' } : undefined}>
+              <TableRow key={idx}>
                 <TableCell>{idx}</TableCell>
                 <TableCell>{b.Hash ? `${b.Hash.slice(0,8)}...` : '-'}</TableCell>
                 <TableCell>{b.PrevHash ? `${b.PrevHash.slice(0,8)}...` : '-'}</TableCell>
-                <TableCell>{isGenesis ? '-' : data.from}</TableCell>
-                <TableCell>{isGenesis ? '-' : data.to}</TableCell>
-                <TableCell align="right">{isGenesis ? '-' : data.amount}</TableCell>
+                <TableCell>{data.from}</TableCell>
+                <TableCell>{data.to}</TableCell>
+                <TableCell align="right">{data.amount}</TableCell>
                 <TableCell>{new Date(b.Timestamp).toLocaleString()}</TableCell>
               </TableRow>
             );
