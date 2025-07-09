@@ -97,18 +97,24 @@ func (s *Store) UpdatePassword(email, password string) error {
 
 // All returns all users without passwords.
 func (s *Store) All() ([]User, error) {
-	rows, err := s.db.Query(`SELECT email, first_name, last_name, mobile, pin_code, state, city, country FROM users`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var users []User
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.Email, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country); err != nil {
-			return nil, err
-		}
-		users = append(users, u)
-	}
-	return users, nil
+        rows, err := s.db.Query(`SELECT email, first_name, last_name, mobile, pin_code, state, city, country FROM users`)
+        if err != nil {
+                return nil, err
+        }
+        defer rows.Close()
+        var users []User
+        for rows.Next() {
+                var u User
+                if err := rows.Scan(&u.Email, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country); err != nil {
+                        return nil, err
+                }
+                users = append(users, u)
+        }
+        return users, nil
+}
+
+// DeleteAll removes all user records.
+func (s *Store) DeleteAll() error {
+        _, err := s.db.Exec(`DELETE FROM users`)
+        return err
 }
