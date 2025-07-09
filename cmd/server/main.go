@@ -143,16 +143,20 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
-	user, ok := s.usernameFromRequest(r)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
+	user, _ := s.usernameFromRequest(r)
 	var body struct {
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if user == "" {
+		user = body.Username
+	}
+	if user == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	if err := s.users.UpdatePassword(user, body.Password); err != nil {

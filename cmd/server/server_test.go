@@ -56,3 +56,29 @@ func TestServerEndpoints(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 }
+
+func TestResetPasswordWithoutLogin(t *testing.T) {
+	srv := NewServer(1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/login", srv.login)
+	mux.HandleFunc("/reset", srv.resetPassword)
+
+	// reset root password without a session
+	body, _ := json.Marshal(map[string]string{"username": "root", "password": "newpass"})
+	req := httptest.NewRequest(http.MethodPost, "/reset", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	// login using new password
+	creds := map[string]string{"username": "root", "password": "newpass"}
+	body, _ = json.Marshal(creds)
+	req = httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("login failed with new password: %d", w.Code)
+	}
+}
