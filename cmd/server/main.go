@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,13 +10,17 @@ import (
 	"time"
 
 	"blockchain_go/internal/blockchain"
+	"blockchain_go/internal/users"
 )
 
 // Server exposes HTTP handlers to interact with the blockchain.
 
 type Server struct {
-	chain blockchain.Blockchain
-	mu    sync.Mutex
+	chain    blockchain.Blockchain
+	mu       sync.Mutex
+	users    *users.Store
+	sessions map[string]string
+	sessMu   sync.Mutex
 }
 
 // withCORS wraps an http.HandlerFunc adding permissive CORS headers so the
@@ -45,11 +51,113 @@ func withLogging(h http.HandlerFunc) http.HandlerFunc {
 // NewServer returns a Server with a freshly created blockchain using the
 // provided mining difficulty.
 func NewServer(difficulty int) *Server {
-	return &Server{chain: blockchain.CreateBlockchain(difficulty)}
+	store, err := users.NewStore("users.db")
+	if err != nil {
+		log.Fatalf("failed to init user store: %v", err)
+	}
+	// ensure root user exists
+	_ = store.CreateUser("root", "12345")
+	return &Server{
+		chain:    blockchain.CreateBlockchain(difficulty),
+		users:    store,
+		sessions: make(map[string]string),
+	}
+}
+
+func (s *Server) usernameFromRequest(r *http.Request) (string, bool) {
+	cookie, err := r.Cookie("session")
+	if err != nil {
+		return "", false
+	}
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	u, ok := s.sessions[cookie.Value]
+	return u, ok
+}
+
+func (s *Server) newSession(username string) string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	token := hex.EncodeToString(b)
+	s.sessMu.Lock()
+	s.sessions[token] = username
+	s.sessMu.Unlock()
+	return token
+}
+
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.users.ValidateUser(creds.Username, creds.Password); err != nil {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	token := s.newSession(creds.Username)
+	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.users.CreateUser(creds.Username, creds.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	token := s.newSession(creds.Username)
+	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/"})
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.usernameFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.users.UpdatePassword(user, body.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session")
+	if err == nil {
+		s.sessMu.Lock()
+		delete(s.sessions, cookie.Value)
+		s.sessMu.Unlock()
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: "", Path: "/", MaxAge: -1})
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 // addTransaction handles POST requests creating a transaction block.
 func (s *Server) addTransaction(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.usernameFromRequest(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	var tx struct {
 		From   string  `json:"from"`
 		To     string  `json:"to"`
@@ -72,6 +180,10 @@ func (s *Server) addTransaction(w http.ResponseWriter, r *http.Request) {
 
 // getChain responds with the current blockchain.
 func (s *Server) getChain(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.usernameFromRequest(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	log.Printf("Chain requested. Length %d", len(s.chain.Chain))
@@ -83,6 +195,10 @@ func (s *Server) getChain(w http.ResponseWriter, r *http.Request) {
 
 // validate checks that the blockchain state is valid.
 func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.usernameFromRequest(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	s.mu.Lock()
 	valid := s.chain.IsValid()
 	s.mu.Unlock()
@@ -96,6 +212,10 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 func main() {
 	srv := NewServer(2)
 
+	http.HandleFunc("/login", withCORS(withLogging(srv.login)))
+	http.HandleFunc("/signup", withCORS(withLogging(srv.signup)))
+	http.HandleFunc("/reset", withCORS(withLogging(srv.resetPassword)))
+	http.HandleFunc("/logout", withCORS(withLogging(srv.logout)))
 	http.HandleFunc("/transaction", withCORS(withLogging(srv.addTransaction)))
 	http.HandleFunc("/chain", withCORS(withLogging(srv.getChain)))
 	http.HandleFunc("/validate", withCORS(withLogging(srv.validate)))

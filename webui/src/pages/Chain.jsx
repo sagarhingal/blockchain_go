@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Typography } from '@mui/material';
 import { getChain } from '../api';
 
 export default function Chain() {
@@ -11,8 +12,8 @@ export default function Chain() {
 
   return (
     <div style={{ padding: '1rem' }}>
-      <h2>Blockchain</h2>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <Typography variant="h5" gutterBottom>Blockchain</Typography>
+      {error && <Typography color="error">{error}</Typography>}
       <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(chain, null, 2)}</pre>
     </div>
   );
