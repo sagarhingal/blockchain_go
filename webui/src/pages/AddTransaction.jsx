@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button, TextField, Typography } from '@mui/material';
 import { addTransaction } from "../api";
 
 export default function AddTransaction() {
@@ -24,45 +25,35 @@ export default function AddTransaction() {
 
   return (
     <div style={{ padding: "1rem" }}>
-      <h2>Add Transaction</h2>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      <Typography variant="h5" gutterBottom>Add Transaction</Typography>
+      {error && <Typography color="error">{error}</Typography>}
       <form onSubmit={handleSubmit} style={{ marginBottom: "1rem" }}>
-        <input
+        <TextField
           name="from"
-          list="names"
           value={form.from}
           onChange={handleChange}
-          placeholder="From"
+          label="From"
           required
+          sx={{ mr: 1 }}
         />
-        <input
+        <TextField
           name="to"
-          list="names"
           value={form.to}
           onChange={handleChange}
-          placeholder="To"
+          label="To"
           required
+          sx={{ mr: 1 }}
         />
-        <input
+        <TextField
           name="amount"
-          list="amounts"
           type="number"
           value={form.amount}
           onChange={handleChange}
-          placeholder="Amount"
+          label="Amount"
           required
+          sx={{ mr: 1, width: 100 }}
         />
-        <button type="submit">Submit</button>
-        <datalist id="names">
-          <option value="Alice" />
-          <option value="Bob" />
-          <option value="Charlie" />
-        </datalist>
-        <datalist id="amounts">
-          <option value="1" />
-          <option value="5" />
-          <option value="10" />
-        </datalist>
+        <Button type="submit" variant="contained">Submit</Button>
       </form>
     </div>
   );

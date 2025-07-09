@@ -1,29 +1,47 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Button, TextField, Typography } from '@mui/material';
 import { useAuth } from '../AuthContext';
 
 export default function Login() {
   const { login } = useAuth();
   const [name, setName] = useState('');
+  const [pass, setPass] = useState('');
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (name.trim()) login(name.trim());
+    try {
+      await login(name.trim(), pass);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} style={{ maxWidth: 300, margin: '2rem auto' }}>
-      <h2>Login</h2>
-      <input
-        type="text"
+      <Typography variant="h5" gutterBottom>Login</Typography>
+      {error && <Typography color="error">{error}</Typography>}
+      <TextField
+        fullWidth
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Username"
+        label="Username"
+        margin="normal"
         required
-        style={{ width: '100%', padding: '0.5rem' }}
       />
-      <button type="submit" style={{ marginTop: '1rem', width: '100%' }}>
-        Login
-      </button>
+      <TextField
+        fullWidth
+        type="password"
+        value={pass}
+        onChange={(e) => setPass(e.target.value)}
+        label="Password"
+        margin="normal"
+        required
+      />
+      <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>Login</Button>
+      <Button component={Link} to="/signup" fullWidth sx={{ mt: 1 }}>Sign Up</Button>
+      <Button component={Link} to="/reset" fullWidth sx={{ mt: 1 }}>Reset Password</Button>
     </form>
   );
 }

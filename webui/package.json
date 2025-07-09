@@ -12,7 +12,10 @@
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^7.6.3"
+    "react-router-dom": "^7.6.3",
+    "@mui/material": "^5.15.13",
+    "@emotion/react": "^11.11.3",
+    "@emotion/styled": "^11.11.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",

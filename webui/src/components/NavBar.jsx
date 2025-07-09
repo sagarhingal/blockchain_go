@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { AppBar, Toolbar, Button } from '@mui/material';
 import { useAuth } from "../AuthContext";
 
 export default function NavBar() {
@@ -7,23 +8,14 @@ export default function NavBar() {
   if (!user) return null;
 
   return (
-    <nav style={{ padding: "1rem", borderBottom: "1px solid #ccc" }}>
-      <Link to="/" style={{ marginRight: "1rem" }}>
-        Dashboard
-      </Link>
-      <Link to="/chain" style={{ marginRight: "1rem" }}>
-        Chain
-      </Link>
-      <Link to="/transaction" style={{ marginRight: "1rem" }}>
-        Add Tx
-      </Link>
-      <Link to="/validate" style={{ marginRight: "1rem" }}>
-        Validate
-      </Link>
-      <Link to="/settings" style={{ marginRight: "1rem" }}>
-        Settings
-      </Link>
-      <button onClick={logout}>Logout</button>
-    </nav>
+    <AppBar position="static">
+      <Toolbar>
+        <Button color="inherit" component={Link} to="/">Dashboard</Button>
+        <Button color="inherit" component={Link} to="/chain">Chain</Button>
+        <Button color="inherit" component={Link} to="/transaction">Add Tx</Button>
+        <Button color="inherit" component={Link} to="/settings">Settings</Button>
+        <Button color="inherit" onClick={logout}>Logout</Button>
+      </Toolbar>
+    </AppBar>
   );
 }

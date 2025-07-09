@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { getChain } from "../api";
+import { Button, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
+import { getChain, validateChain } from "../api";
 
 export default function Dashboard() {
   const [chain, setChain] = useState([]);
@@ -20,42 +21,44 @@ export default function Dashboard() {
     }
   };
 
+  const validate = async () => {
+    try {
+      const res = await validateChain();
+      alert(`Chain valid: ${res.valid}`);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div style={{ padding: "1rem" }}>
-      <h2>Dashboard</h2>
+      <Typography variant="h4" gutterBottom>Dashboard</Typography>
       {error && <p style={{ color: "red" }}>{error}</p>}
       <p>
         Blocks in chain: {chain.length}{" "}
-        <button onClick={refresh}>Refresh</button>
+        <Button variant="outlined" onClick={refresh}>Refresh</Button>{" "}
+        <Button variant="outlined" onClick={validate}>Validate</Button>
       </p>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-              #
-            </th>
-            <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-              From
-            </th>
-            <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-              To
-            </th>
-            <th style={{ borderBottom: "1px solid #ccc", textAlign: "left" }}>
-              Amount
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>#</TableCell>
+            <TableCell>From</TableCell>
+            <TableCell>To</TableCell>
+            <TableCell>Amount</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {chain.map((b, idx) => (
-            <tr key={idx}>
-              <td>{idx}</td>
-              <td>{b.Data?.from || "-"}</td>
-              <td>{b.Data?.to || "-"}</td>
-              <td>{b.Data?.amount || "-"}</td>
-            </tr>
+            <TableRow key={idx}>
+              <TableCell>{idx}</TableCell>
+              <TableCell>{b.Data?.from || "-"}</TableCell>
+              <TableCell>{b.Data?.to || "-"}</TableCell>
+              <TableCell>{b.Data?.amount || "-"}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
