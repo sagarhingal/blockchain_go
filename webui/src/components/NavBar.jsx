@@ -17,8 +17,8 @@ export default function NavBar() {
     <AppBar position="static">
       <Toolbar>
         <Button color="inherit" component={Link} to="/">Dashboard</Button>
-        <Button color="inherit" component={Link} to="/chain">Chain</Button>
-        <Button color="inherit" component={Link} to="/transaction">Add Tx</Button>
+        <Button color="inherit" component={Link} to="/orders">Orders</Button>
+        <Button color="inherit" component={Link} to="/marketplace">Marketplace</Button>
         <div style={{ marginLeft: 'auto' }}>
           <IconButton color="inherit" onClick={handleMenu} size="large">
             <AccountCircle />
