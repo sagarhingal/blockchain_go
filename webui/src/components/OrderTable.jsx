@@ -1,5 +1,11 @@
-import { Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
-import { Link } from 'react-router-dom';
+import {
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+} from "@mui/material";
+import { Link } from "react-router-dom";
 
 export default function OrderTable({ orders }) {
   return (
@@ -9,6 +15,7 @@ export default function OrderTable({ orders }) {
           <TableCell>ID</TableCell>
           <TableCell>Owner</TableCell>
           <TableCell>Status</TableCell>
+          <TableCell>Created</TableCell>
         </TableRow>
       </TableHead>
       <TableBody>
@@ -19,6 +26,7 @@ export default function OrderTable({ orders }) {
             </TableCell>
             <TableCell>{o.Owner}</TableCell>
             <TableCell>{o.Status}</TableCell>
+            <TableCell>{new Date(o.Created).toLocaleString()}</TableCell>
           </TableRow>
         ))}
       </TableBody>

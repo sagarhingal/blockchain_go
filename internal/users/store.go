@@ -13,8 +13,9 @@ type Store struct {
 }
 
 // User represents an actor in the system.
+// Email is used as the unique identifier for login.
 type User struct {
-	Username  string
+	Email     string
 	Password  string
 	FirstName string
 	LastName  string
@@ -31,10 +32,10 @@ func NewStore(path string) (*Store, error) {
 		return nil, err
 	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY,
-                password TEXT,
-                first_name TEXT,
-                last_name TEXT,
+               email TEXT PRIMARY KEY,
+               password TEXT,
+               first_name TEXT,
+               last_name TEXT,
                 mobile TEXT,
                 pin_code TEXT,
                 state TEXT,
@@ -51,20 +52,20 @@ func (s *Store) CreateUser(u User) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`INSERT INTO users(username, password, first_name, last_name, mobile, pin_code, state, city, country)
-                VALUES(?,?,?,?,?,?,?,?,?)`,
-		u.Username, string(hash), u.FirstName, u.LastName, u.Mobile, u.PinCode, u.State, u.City, u.Country)
+	_, err = s.db.Exec(`INSERT INTO users(email, password, first_name, last_name, mobile, pin_code, state, city, country)
+               VALUES(?,?,?,?,?,?,?,?,?)`,
+		u.Email, string(hash), u.FirstName, u.LastName, u.Mobile, u.PinCode, u.State, u.City, u.Country)
 	return err
 }
 
-func (s *Store) getHash(username string) (string, error) {
+func (s *Store) getHash(email string) (string, error) {
 	var hash string
-	err := s.db.QueryRow(`SELECT password FROM users WHERE username=?`, username).Scan(&hash)
+	err := s.db.QueryRow(`SELECT password FROM users WHERE email=?`, email).Scan(&hash)
 	return hash, err
 }
 
-func (s *Store) ValidateUser(username, password string) error {
-	hash, err := s.getHash(username)
+func (s *Store) ValidateUser(email, password string) error {
+	hash, err := s.getHash(email)
 	if err != nil {
 		return err
 	}
@@ -75,28 +76,28 @@ func (s *Store) ValidateUser(username, password string) error {
 }
 
 // GetUser returns user details without password.
-func (s *Store) GetUser(username string) (*User, error) {
+func (s *Store) GetUser(email string) (*User, error) {
 	var u User
-	err := s.db.QueryRow(`SELECT username, first_name, last_name, mobile, pin_code, state, city, country FROM users WHERE username=?`, username).
-		Scan(&u.Username, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country)
+	err := s.db.QueryRow(`SELECT email, first_name, last_name, mobile, pin_code, state, city, country FROM users WHERE email=?`, email).
+		Scan(&u.Email, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country)
 	if err != nil {
 		return nil, err
 	}
 	return &u, nil
 }
 
-func (s *Store) UpdatePassword(username, password string) error {
+func (s *Store) UpdatePassword(email, password string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`UPDATE users SET password=? WHERE username=?`, string(hash), username)
+	_, err = s.db.Exec(`UPDATE users SET password=? WHERE email=?`, string(hash), email)
 	return err
 }
 
 // All returns all users without passwords.
 func (s *Store) All() ([]User, error) {
-	rows, err := s.db.Query(`SELECT username, first_name, last_name, mobile, pin_code, state, city, country FROM users`)
+	rows, err := s.db.Query(`SELECT email, first_name, last_name, mobile, pin_code, state, city, country FROM users`)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +105,7 @@ func (s *Store) All() ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.Username, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country); err != nil {
+		if err := rows.Scan(&u.Email, &u.FirstName, &u.LastName, &u.Mobile, &u.PinCode, &u.State, &u.City, &u.Country); err != nil {
 			return nil, err
 		}
 		users = append(users, u)

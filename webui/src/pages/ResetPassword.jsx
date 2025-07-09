@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button, TextField, Typography } from "@mui/material";
+import { resetPassword } from "../api";
 import { useAuth } from "../AuthContext";
 
-export default function Login() {
-  const { login } = useAuth();
+export default function ResetPassword() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
@@ -13,8 +14,8 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await login(email.trim(), pass);
-      navigate("/");
+      await resetPassword({ email: email.trim(), password: pass });
+      navigate("/login");
     } catch (err) {
       setError(err.message);
     }
@@ -26,34 +27,30 @@ export default function Login() {
       style={{ maxWidth: 300, margin: "2rem auto" }}
     >
       <Typography variant="h5" gutterBottom>
-        Login
+        Reset Password
       </Typography>
       {error && <Typography color="error">{error}</Typography>}
-      <TextField
-        fullWidth
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        label="Email"
-        margin="normal"
-        required
-      />
+      {!user && (
+        <TextField
+          fullWidth
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          label="Email"
+          margin="normal"
+          required
+        />
+      )}
       <TextField
         fullWidth
         type="password"
         value={pass}
         onChange={(e) => setPass(e.target.value)}
-        label="Password"
+        label="New Password"
         margin="normal"
         required
       />
       <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
-        Login
-      </Button>
-      <Button component={Link} to="/reset" fullWidth sx={{ mt: 1 }}>
-        Forgot Password
-      </Button>
-      <Button component={Link} to="/signup" fullWidth sx={{ mt: 1 }}>
-        Sign Up
+        Reset
       </Button>
     </form>
   );

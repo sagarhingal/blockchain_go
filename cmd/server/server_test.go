@@ -55,9 +55,9 @@ func TestOrderFlow(t *testing.T) {
 		return resp["token"]
 	}
 
-	aliceTok := signup(users.User{Username: "alice", Password: "pass", FirstName: "A"})
-	bobTok := signup(users.User{Username: "bob", Password: "pass", FirstName: "B"})
-	charTok := signup(users.User{Username: "char", Password: "pass", FirstName: "C"})
+	aliceTok := signup(users.User{Email: "alice@example.com", Password: "pass", FirstName: "A"})
+	bobTok := signup(users.User{Email: "bob@example.com", Password: "pass", FirstName: "B"})
+	charTok := signup(users.User{Email: "char@example.com", Password: "pass", FirstName: "C"})
 
 	// alice creates order
 	req := httptest.NewRequest(http.MethodPost, "/order", nil)
@@ -72,7 +72,7 @@ func TestOrderFlow(t *testing.T) {
 	id := ord["ID"].(string)
 
 	// alice adds bob role supplier
-	body, _ := json.Marshal(map[string]string{"Actor": "bob", "Role": "supplier"})
+	body, _ := json.Marshal(map[string]string{"Actor": "bob@example.com", "Role": "supplier"})
 	req = httptest.NewRequest(http.MethodPost, "/order/"+id+"/roles", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+aliceTok)
 	w = httptest.NewRecorder()
@@ -82,7 +82,7 @@ func TestOrderFlow(t *testing.T) {
 	}
 
 	// alice invites char as watcher
-	body, _ = json.Marshal(map[string]string{"Actor": "char"})
+	body, _ = json.Marshal(map[string]string{"Actor": "char@example.com"})
 	req = httptest.NewRequest(http.MethodPost, "/order/"+id+"/invite", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+aliceTok)
 	w = httptest.NewRecorder()
