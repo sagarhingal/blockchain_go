@@ -47,11 +47,12 @@ export async function signup(username, password) {
   });
 }
 
-export async function resetPassword(password) {
+export async function resetPassword(password, username) {
+  const body = username ? { username, password } : { password };
   return request('/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify(body),
   });
 }
 

@@ -4,6 +4,7 @@ import { Button, TextField, Typography } from '@mui/material';
 import { resetPassword } from '../api';
 
 export default function ResetPassword() {
+  const [name, setName] = useState('');
   const [pw, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
   const [msg, setMsg] = useState('');
@@ -16,7 +17,7 @@ export default function ResetPassword() {
       return;
     }
     try {
-      await resetPassword(pw);
+      await resetPassword(pw, name.trim());
       setMsg('Password updated');
       setTimeout(() => navigate('/login'), 1000);
     } catch (err) {
@@ -28,6 +29,7 @@ export default function ResetPassword() {
     <form onSubmit={handleSubmit} style={{ maxWidth:300, margin:'2rem auto' }}>
       <Typography variant="h5" gutterBottom>Reset Password</Typography>
       {msg && <Typography>{msg}</Typography>}
+      <TextField fullWidth value={name} onChange={(e)=>setName(e.target.value)} label="Username" margin="normal" required />
       <TextField fullWidth type="password" value={pw} onChange={(e)=>setPw(e.target.value)} label="New Password" margin="normal" required />
       <TextField fullWidth type="password" value={confirm} onChange={(e)=>setConfirm(e.target.value)} label="Confirm Password" margin="normal" required />
       <Button type="submit" variant="contained" fullWidth sx={{ mt:2 }}>Reset</Button>
