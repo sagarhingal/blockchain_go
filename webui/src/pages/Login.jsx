@@ -41,7 +41,6 @@ export default function Login() {
       />
       <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>Login</Button>
       <Button component={Link} to="/signup" fullWidth sx={{ mt: 1 }}>Sign Up</Button>
-      <Button component={Link} to="/reset" fullWidth sx={{ mt: 1 }}>Reset Password</Button>
     </form>
   );
 }

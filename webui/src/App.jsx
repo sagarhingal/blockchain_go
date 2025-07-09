@@ -3,10 +3,10 @@ import { AuthProvider, useAuth } from "./AuthContext";
 import NavBar from "./components/NavBar";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
-import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
-import AddTransaction from "./pages/AddTransaction";
-import Chain from "./pages/Chain";
+import Orders from "./pages/Orders";
+import OrderDetail from "./pages/OrderDetail";
+import Marketplace from "./pages/Marketplace";
 import Settings from "./pages/Settings";
 
 function AppRoutes() {
@@ -18,15 +18,15 @@ function AppRoutes() {
         {user ? (
           <>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/transaction" element={<AddTransaction />} />
-            <Route path="/chain" element={<Chain />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
+            <Route path="/marketplace" element={<Marketplace />} />
             <Route path="/settings" element={<Settings />} />
           </>
         ) : (
           <>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
-            <Route path="/reset" element={<ResetPassword />} />
             <Route path="/*" element={<Login />} />
           </>
         )}
