@@ -48,6 +48,8 @@ npm run dev
 ```
 
 The UI expects the Go server to be running on `http://localhost:8080`.
+The server now returns CORS headers that allow credentials so the UI can
+authenticate using cookies when served from a different port.
 
 ## Package layout
 
