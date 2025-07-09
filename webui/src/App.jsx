@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./AuthContext";
 import NavBar from "./components/NavBar";
 import Login from "./pages/Login";
 import SignUp from "./pages/SignUp";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetail";
@@ -30,6 +31,7 @@ function AppRoutes() {
             <Route path="/*" element={<Login />} />
           </>
         )}
+        <Route path="/reset" element={<ResetPassword />} />
       </Routes>
     </>
   );

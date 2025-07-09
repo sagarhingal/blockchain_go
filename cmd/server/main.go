@@ -34,7 +34,7 @@ func NewServer(dbPath ...string) *Server {
 		log.Fatalf("failed to init user store: %v", err)
 	}
 	// ensure root exists
-	_ = store.CreateUser(users.User{Username: "root", Password: "12345", FirstName: "Root"})
+	_ = store.CreateUser(users.User{Email: "root@example.com", Password: "12345", FirstName: "Root"})
 
 	lf, _ := os.OpenFile("events.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	logger := log.New(lf, "", log.LstdFlags)
@@ -60,9 +60,9 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) tokenForUser(username string) (string, error) {
+func (s *Server) tokenForUser(email string) (string, error) {
 	claims := jwt.MapClaims{
-		"sub": username,
+		"sub": email,
 		"exp": time.Now().Add(time.Hour).Unix(),
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -99,24 +99,24 @@ func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	token, _ := s.tokenForUser(body.Username)
+	token, _ := s.tokenForUser(body.Email)
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
-		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.users.ValidateUser(creds.Username, creds.Password); err != nil {
+	if err := s.users.ValidateUser(creds.Email, creds.Password); err != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	token, _ := s.tokenForUser(creds.Username)
+	token, _ := s.tokenForUser(creds.Email)
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
 
@@ -264,6 +264,30 @@ func (s *Server) listActors(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(rows)
 }
 
+func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	email := body.Email
+	if u, ok := s.userFromRequest(r); ok && email == "" {
+		email = u
+	}
+	if email == "" {
+		http.Error(w, "email required", http.StatusBadRequest)
+		return
+	}
+	if err := s.users.UpdatePassword(email, body.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
 func (s *Server) getEvents(w http.ResponseWriter, r *http.Request) {
 	user, ok := s.userFromRequest(r)
 	if !ok {
@@ -304,6 +328,7 @@ func main() {
 
 	http.HandleFunc("/signup", withCORS(srv.signup))
 	http.HandleFunc("/login", withCORS(srv.login))
+	http.HandleFunc("/reset", withCORS(srv.resetPassword))
 	http.HandleFunc("/order", withCORS(srv.createOrder))
 	http.HandleFunc("/order/", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/roles") {

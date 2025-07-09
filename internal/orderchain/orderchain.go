@@ -17,6 +17,7 @@ type Order struct {
 	Owner    string
 	Actors   map[string]string // username->role
 	Status   string
+	Created  time.Time
 	Events   []event
 	AddOns   []string
 	Watchers map[string]bool
@@ -62,6 +63,7 @@ func (c *Chain) CreateOrder(owner string) *Order {
 		Owner:    owner,
 		Actors:   map[string]string{owner: "client"},
 		Status:   "created",
+		Created:  time.Now(),
 		key:      key,
 		Watchers: make(map[string]bool),
 	}
