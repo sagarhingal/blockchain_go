@@ -1,35 +1,47 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
-	"blockchain_go/internal/blockchain"
+	"blockchain_go/internal/orderchain"
 	"blockchain_go/internal/users"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
-// Server exposes HTTP handlers to interact with the blockchain.
+const jwtSecret = "secret"
 
+// Server exposes HTTP handlers to interact with the permissioned chain.
 type Server struct {
-	chain    blockchain.Blockchain
-	mu       sync.Mutex
-	users    *users.Store
-	sessions map[string]session
-	sessMu   sync.Mutex
+	chain  *orderchain.Chain
+	mu     sync.Mutex
+	users  *users.Store
+	logger *log.Logger
 }
 
-type session struct {
-	user    string
-	expires time.Time
+func NewServer(dbPath ...string) *Server {
+	path := "users.db"
+	if len(dbPath) > 0 {
+		path = dbPath[0]
+	}
+	store, err := users.NewStore(path)
+	if err != nil {
+		log.Fatalf("failed to init user store: %v", err)
+	}
+	// ensure root exists
+	_ = store.CreateUser(users.User{Username: "root", Password: "12345", FirstName: "Root"})
+
+	lf, _ := os.OpenFile("events.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	logger := log.New(lf, "", log.LstdFlags)
+
+	return &Server{chain: orderchain.NewChain(), users: store, logger: logger}
 }
 
-// withCORS wraps an http.HandlerFunc adding permissive CORS headers so the
-// web UI running on a different port can interact with the API.
 func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -40,8 +52,7 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			return
 		}
@@ -49,61 +60,47 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// withLogging measures the time taken to execute the handler and logs the
-// request method, path and duration.
-func withLogging(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		h(w, r)
-		duration := time.Since(start)
-		log.Printf("%s %s took %s", r.Method, r.URL.Path, duration)
+func (s *Server) tokenForUser(username string) (string, error) {
+	claims := jwt.MapClaims{
+		"sub": username,
+		"exp": time.Now().Add(time.Hour).Unix(),
 	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return t.SignedString([]byte(jwtSecret))
 }
 
-// NewServer returns a Server with a freshly created blockchain using the
-// provided mining difficulty.
-func NewServer(difficulty int) *Server {
-	store, err := users.NewStore("users.db")
-	if err != nil {
-		log.Fatalf("failed to init user store: %v", err)
-	}
-	// ensure root user exists
-	_ = store.CreateUser("root", "12345")
-	return &Server{
-		chain:    blockchain.CreateBlockchain(difficulty),
-		users:    store,
-		sessions: make(map[string]session),
-	}
-}
-
-func (s *Server) usernameFromRequest(r *http.Request) (string, bool) {
-	cookie, err := r.Cookie("session")
-	if err != nil {
+func (s *Server) userFromRequest(r *http.Request) (string, bool) {
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
 		return "", false
 	}
-	s.sessMu.Lock()
-	sess, ok := s.sessions[cookie.Value]
-	if ok {
-		if time.Now().After(sess.expires) {
-			delete(s.sessions, cookie.Value)
-			ok = false
-		}
+	tokenStr := strings.TrimPrefix(auth, "Bearer ")
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		return []byte(jwtSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return "", false
 	}
-	s.sessMu.Unlock()
+	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return "", false
 	}
-	return sess.user, true
+	sub, ok := claims["sub"].(string)
+	return sub, ok
 }
 
-func (s *Server) newSession(username string) string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	token := hex.EncodeToString(b)
-	s.sessMu.Lock()
-	s.sessions[token] = session{user: username, expires: time.Now().Add(30 * time.Minute)}
-	s.sessMu.Unlock()
-	return token
+func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
+	var body users.User
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.users.CreateUser(body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	token, _ := s.tokenForUser(body.Username)
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -119,131 +116,221 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	token := s.newSession(creds.Username)
-	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", Expires: time.Now().Add(30 * time.Minute)})
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	token, _ := s.tokenForUser(creds.Username)
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
 
-func (s *Server) signup(w http.ResponseWriter, r *http.Request) {
-	var creds struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if err := s.users.CreateUser(creds.Username, creds.Password); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	token := s.newSession(creds.Username)
-	http.SetCookie(w, &http.Cookie{Name: "session", Value: token, Path: "/", Expires: time.Now().Add(30 * time.Minute)})
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	ord := s.chain.CreateOrder(user)
+	s.logger.Printf("order %s created by %s", ord.ID, user)
+	json.NewEncoder(w).Encode(ord)
 }
 
-func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
-	user, _ := s.usernameFromRequest(r)
-	var body struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+func (s *Server) manageRoles(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
+	id := strings.TrimPrefix(r.URL.Path, "/order/")
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) < 2 || parts[1] != "roles" {
+		http.NotFound(w, r)
+		return
+	}
+	ord, ok2 := s.chain.Get(parts[0])
+	if !ok2 {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct{ Actor, Role string }
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if user == "" {
-		user = body.Username
-	}
-	if user == "" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if err := s.users.UpdatePassword(user, body.Password); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session")
-	if err == nil {
-		s.sessMu.Lock()
-		delete(s.sessions, cookie.Value)
-		s.sessMu.Unlock()
-		http.SetCookie(w, &http.Cookie{Name: "session", Value: "", Path: "/", MaxAge: -1})
-	}
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-}
-
-// addTransaction handles POST requests creating a transaction block.
-func (s *Server) addTransaction(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.usernameFromRequest(r); !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	var tx struct {
-		From   string  `json:"from"`
-		To     string  `json:"to"`
-		Amount float64 `json:"amount"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
+	if err := ord.AddRole(user, body.Actor, body.Role); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	r.Body.Close()
-	log.Printf("New transaction from %s to %s amount %.2f", tx.From, tx.To, tx.Amount)
-	s.mu.Lock()
-	s.chain.AddBlock(tx.From, tx.To, tx.Amount)
-	log.Printf("Block added. Chain length %d", len(s.chain.Chain))
-	s.mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	s.logger.Printf("order %s role %s added for %s", ord.ID, body.Role, body.Actor)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// getChain responds with the current blockchain.
+func (s *Server) inviteWatcher(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/order/")
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) < 2 || parts[1] != "invite" {
+		http.NotFound(w, r)
+		return
+	}
+	ord, ok2 := s.chain.Get(parts[0])
+	if !ok2 {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct{ Actor string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := ord.AddWatcher(user, body.Actor); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.logger.Printf("order %s watcher %s added by %s", ord.ID, body.Actor, user)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) updateStatus(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/order/")
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) < 2 || parts[1] != "status" {
+		http.NotFound(w, r)
+		return
+	}
+	ord, ok2 := s.chain.Get(parts[0])
+	if !ok2 {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct{ Status string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := ord.UpdateStatus(user, body.Status); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.logger.Printf("order %s status %s by %s", ord.ID, body.Status, user)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) addAddon(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/order/")
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) < 2 || parts[1] != "addon" {
+		http.NotFound(w, r)
+		return
+	}
+	ord, ok2 := s.chain.Get(parts[0])
+	if !ok2 {
+		http.NotFound(w, r)
+		return
+	}
+	var body struct{ Details string }
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := ord.AddAddon(user, body.Details); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.logger.Printf("order %s addon by %s", ord.ID, user)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) listActors(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.userFromRequest(r); !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	rows, err := s.users.All()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(rows)
+}
+
+func (s *Server) getEvents(w http.ResponseWriter, r *http.Request) {
+	user, ok := s.userFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/order/")
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) < 2 || parts[1] != "events" {
+		http.NotFound(w, r)
+		return
+	}
+	ord, ok2 := s.chain.Get(parts[0])
+	if !ok2 {
+		http.NotFound(w, r)
+		return
+	}
+	ev, err := ord.GetEvents(user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(ev)
+}
+
 func (s *Server) getChain(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.usernameFromRequest(r); !ok {
+	if _, ok := s.userFromRequest(r); !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	log.Printf("Chain requested. Length %d", len(s.chain.Chain))
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(s.chain); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-// validate checks that the blockchain state is valid.
-func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.usernameFromRequest(r); !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	s.mu.Lock()
-	valid := s.chain.IsValid()
-	s.mu.Unlock()
-	log.Printf("Chain validation result: %v", valid)
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]bool{"valid": valid}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	json.NewEncoder(w).Encode(s.chain.Orders())
 }
 
 func main() {
-	srv := NewServer(2)
+	srv := NewServer()
 
-	http.HandleFunc("/login", withCORS(withLogging(srv.login)))
-	http.HandleFunc("/signup", withCORS(withLogging(srv.signup)))
-	http.HandleFunc("/reset", withCORS(withLogging(srv.resetPassword)))
-	http.HandleFunc("/logout", withCORS(withLogging(srv.logout)))
-	http.HandleFunc("/transaction", withCORS(withLogging(srv.addTransaction)))
-	http.HandleFunc("/chain", withCORS(withLogging(srv.getChain)))
-	http.HandleFunc("/validate", withCORS(withLogging(srv.validate)))
+	http.HandleFunc("/signup", withCORS(srv.signup))
+	http.HandleFunc("/login", withCORS(srv.login))
+	http.HandleFunc("/order", withCORS(srv.createOrder))
+	http.HandleFunc("/order/", withCORS(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/roles") {
+			srv.manageRoles(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/status") {
+			srv.updateStatus(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/addon") {
+			srv.addAddon(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/events") {
+			srv.getEvents(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/invite") {
+			srv.inviteWatcher(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	http.HandleFunc("/chain", withCORS(srv.getChain))
+	http.HandleFunc("/transaction", withCORS(srv.createOrder))
+	http.HandleFunc("/marketplace", withCORS(srv.listActors))
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
